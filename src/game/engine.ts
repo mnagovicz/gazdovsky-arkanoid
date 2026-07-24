@@ -802,10 +802,47 @@ export class Game {
     c.fillStyle = 'rgba(255,255,255,0.6)';
     c.font = '600 11px system-ui';
     c.fillText('ŽIVOTY', WORLD_W - 14, 20);
-    c.font = '18px system-ui';
-    let hearts = '';
-    for (let i = 0; i < this.lives; i++) hearts += '❤️';
-    c.fillText(hearts || '💀', WORLD_W - 14, 44);
+
+    // Lives as drawn vector hearts — emoji text measures unreliably across
+    // platforms (multi-byte + U+FE0F) and overflowed the canvas on mobile.
+    const heartSize = 16;
+    const heartGap = 5;
+    const slots = Math.max(START_LIVES, this.lives);
+    const totalW = slots * heartSize + (slots - 1) * heartGap;
+    const startX = WORLD_W - 14 - totalW;
+    for (let i = 0; i < slots; i++) {
+      this.drawHeart(startX + i * (heartSize + heartGap), 32, heartSize, i < this.lives);
+    }
+  }
+
+  /** Draw a heart icon in a size×size box at (x, y). Filled = life remaining. */
+  private drawHeart(x: number, y: number, s: number, filled: boolean) {
+    const c = this.ctx;
+    c.beginPath();
+    c.moveTo(x + 0.5 * s, y + 0.3 * s);
+    c.bezierCurveTo(x + 0.5 * s, y + 0.08 * s, x + 0.06 * s, y, x + 0.02 * s, y + 0.36 * s);
+    c.bezierCurveTo(x, y + 0.58 * s, x + 0.26 * s, y + 0.78 * s, x + 0.5 * s, y + 0.95 * s);
+    c.bezierCurveTo(x + 0.74 * s, y + 0.78 * s, x + s, y + 0.58 * s, x + 0.98 * s, y + 0.36 * s);
+    c.bezierCurveTo(x + 0.94 * s, y, x + 0.5 * s, y + 0.08 * s, x + 0.5 * s, y + 0.3 * s);
+    c.closePath();
+    if (filled) {
+      c.fillStyle = '#ff5d8f';
+      c.shadowColor = '#ff5d8f';
+      c.shadowBlur = 7;
+      c.fill();
+      c.shadowBlur = 0;
+      // gloss highlight
+      c.fillStyle = 'rgba(255,255,255,0.55)';
+      c.beginPath();
+      c.arc(x + 0.3 * s, y + 0.3 * s, s * 0.09, 0, Math.PI * 2);
+      c.fill();
+    } else {
+      c.fillStyle = 'rgba(255,93,143,0.08)';
+      c.fill();
+      c.strokeStyle = 'rgba(255,93,143,0.35)';
+      c.lineWidth = 1.5;
+      c.stroke();
+    }
   }
 
   private roundRect(x: number, y: number, w: number, h: number, r: number) {
