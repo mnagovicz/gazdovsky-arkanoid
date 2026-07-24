@@ -1,6 +1,15 @@
-# HANDOFF — Gazdovský arkanoid (MVP v0.2)
+# HANDOFF — Gazdovský arkanoid (MVP v0.3)
 
 Datum: 2026-07-24
+
+## 🐛 Opravy a novinky v0.3 (2026-07-24)
+
+### 1. Bugfix: softlock lepivého pádla (sticky)
+Když vypršel časovač sticky efektu, zatímco byl míček nalepený na pádle, zůstal nalepený **navždy** — `tap()` vypouští míčky jen dokud je efekt aktivní, takže po expiraci už ťuknutí nic neudělalo a hra se softlockla.
+**Oprava:** `expireEffect('sticky')` teď okamžitě vypouští všechny míčky nalepené sticky powerupem (sdílená logika `launchStuck()`). Míčky navíc nesou nový příznak **`stuckReason: 'start' | 'sticky'`**, takže expirace vypustí jen míčky nalepené powerupem — startovní míček čekající na pádle (`ballOnPaddle`) se nikdy nevystřelí předčasně. Nově sebraný sticky powerup těsně po expiraci funguje čistě (expirace řeší jen staré nalepené míčky, nový efekt nastaví vlastní časovač).
+
+### 2. Nový powerup: Průrazný míček (`pierce`)
+9. typ powerupu — stříbrná kapsle se symbolem `➤` (`#e8e8f0`), trvání **8 s**, váha ve spawn tabulce **0,09** (ostatní váhy mírně sníženy, součet stále 1,0). Po sebrání míček **prolétává skrz cihly jako střela**: poškozuje je normálně (spotřebovává hp včetně vícehitových, dává skóre, dropuje powerupy), ale **neodráží se** od nich — pokračuje v původním směru. Odrazy od stěn a pádla fungují dál normálně. Max jedna cihla na míček na snímek (`break` zachován), aby fyzika zůstala konzistentní. Průrazné míčky se vykreslují se stříbrno-bílým jádrem, azurovým glow a pohybovou stopou (trail), aby hráč efekt poznal na první pohled. Popisek banneru: „Průrazný míček!".
 
 ## 🐛 Opravy v0.2 (2026-07-24)
 
@@ -38,7 +47,7 @@ Původně: `rows` strop 11 už na L29, `maxHp` natvrdo 3 od L16, lineární rych
   - úvodní menu s výběrem 7 hráčů (Táta, Máma, Laura, Honza, Maty, Tobi, Miku)
   - 50 procedurálně generovaných levelů (seedovaný RNG → všichni hrají stejné levely; roste počet řad 4→14, pevnost cihel 1–5 zásahů s barvami zelená/žlutá/růžová/oranžová/fialová, rychlost míčku 330→780 px/s, menší míček i pádlo na vyšších levelech; 10 různých vzorů layoutu, na vyšších levelech se vrství 2–3 vzory, každý 10. level je bossovský milník — viz sekce Opravy v0.2)
   - fyzika odrazů: úhel podle místa dopadu na pádlo (±62°), odrazy od stěn/cihel s korekcí osy
-  - všech 8 bonusů: expand, shrink, multiball (max 6 míčků), +1 život, sticky (ťuk = vypuštění), fast/slow ball, laser (ťuk = střelba, cooldown 0,28 s)
+  - všech 9 bonusů: expand, shrink, multiball (max 6 míčků), +1 život, sticky (ťuk = vypuštění, expirace efektu míčky bezpečně vypustí), fast/slow ball, laser (ťuk = střelba, cooldown 0,28 s), pierce (průraz skrz cihly bez odrazu)
   - 3 životy, Game Over obrazovka se skóre, restart, návrat do menu
   - skóre: 50/120/200/320/480 b za cihlu dle pevnosti + level×100 bonus; HUD se skóre/levelem/životy (životy = vektorová srdíčka, ne emoji)
   - částicové efekty při rozbití cihly, glow efekty, animované pozadí, synth zvuky (WebAudio, žádné assety)
@@ -78,7 +87,7 @@ npm run build && npm run preview   # produkční ověření
 
 - [x] `npm install && npm run dev` → hra hratelná v prohlížeči
 - [x] výběr jména, hratelné levely, rostoucí obtížnost
-- [x] bonusy v akci (padají náhodně z ~16 % cihel, vážené rozložení všech 8 typů)
+- [x] bonusy v akci (padají náhodně z ~16 % cihel, vážené rozložení všech 9 typů)
 - [x] 3 životy → Game Over se skóre
 - [x] obrazovka žebříčku (bez Supabase klíčů ukazuje lokální data + upozornění „connect Supabase")
 - [x] `npm run build` bez chyb
