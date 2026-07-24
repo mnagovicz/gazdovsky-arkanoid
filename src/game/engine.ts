@@ -24,7 +24,8 @@ export type PowerupType =
   | 'sticky'
   | 'fast'
   | 'slow'
-  | 'laser';
+  | 'laser'
+  | 'pierce';
 
 interface Ball {
   x: number;
@@ -91,6 +92,7 @@ const POWERUP_META: Record<PowerupType, { color: string; label: string }> = {
   fast: { color: '#ff4d4d', label: '≫' },
   slow: { color: '#8ecae6', label: '≪' },
   laser: { color: '#ffd23f', label: '⌖' },
+  pierce: { color: '#e8e8f0', label: '➤' },
 };
 
 const EFFECT_DUR: Partial<Record<PowerupType, number>> = {
@@ -100,6 +102,7 @@ const EFFECT_DUR: Partial<Record<PowerupType, number>> = {
   fast: 9,
   slow: 9,
   laser: 10,
+  pierce: 8,
 };
 
 export class Game {
@@ -416,6 +419,7 @@ export class Game {
       }
 
       // bricks
+      const piercing = this.effects.has('pierce');
       for (const br of this.bricks) {
         if (br.hp <= 0) continue;
         if (
@@ -424,17 +428,24 @@ export class Game {
           b.y + b.r > br.y &&
           b.y - b.r < br.y + br.h
         ) {
-          // resolve bounce axis by smallest penetration
-          const overlapL = b.x + b.r - br.x;
-          const overlapR = br.x + br.w - (b.x - b.r);
-          const overlapT = b.y + b.r - br.y;
-          const overlapB = br.y + br.h - (b.y - b.r);
-          const minX = Math.min(overlapL, overlapR);
-          const minY = Math.min(overlapT, overlapB);
-          if (minX < minY) b.vx = overlapL < overlapR ? -Math.abs(b.vx) : Math.abs(b.vx);
-          else b.vy = overlapT < overlapB ? -Math.abs(b.vy) : Math.abs(b.vy);
-          this.hitBrick(br);
-          break;
+          if (piercing) {
+            // piercing ball flies straight through — damages the brick
+            // (hp consumed normally) but keeps its velocity, no bounce
+            this.hitBrick(br);
+            break; // max one brick per ball per frame, keeps physics sane
+          } else {
+            // resolve bounce axis by smallest penetration
+            const overlapL = b.x + b.r - br.x;
+            const overlapR = br.x + br.w - (b.x - b.r);
+            const overlapT = b.y + b.r - br.y;
+            const overlapB = br.y + br.h - (b.y - b.r);
+            const minX = Math.min(overlapL, overlapR);
+            const minY = Math.min(overlapT, overlapB);
+            if (minX < minY) b.vx = overlapL < overlapR ? -Math.abs(b.vx) : Math.abs(b.vx);
+            else b.vy = overlapT < overlapB ? -Math.abs(b.vy) : Math.abs(b.vy);
+            this.hitBrick(br);
+            break;
+          }
         }
       }
     }
@@ -526,14 +537,15 @@ export class Game {
 
   private randomPowerup(): PowerupType {
     const table: [PowerupType, number][] = [
-      ['expand', 0.18],
-      ['multiball', 0.16],
-      ['slow', 0.13],
-      ['laser', 0.13],
-      ['sticky', 0.12],
+      ['expand', 0.16],
+      ['multiball', 0.15],
+      ['slow', 0.12],
+      ['laser', 0.12],
+      ['sticky', 0.11],
       ['life', 0.08],
-      ['fast', 0.1],
-      ['shrink', 0.1],
+      ['fast', 0.09],
+      ['shrink', 0.08],
+      ['pierce', 0.09],
     ];
     let r = Math.random();
     for (const [t, w] of table) {
@@ -589,6 +601,9 @@ export class Game {
       case 'laser':
         this.effects.set('laser', EFFECT_DUR.laser!);
         break;
+      case 'pierce':
+        this.effects.set('pierce', EFFECT_DUR.pierce!);
+        break;
     }
   }
 
@@ -616,6 +631,7 @@ export class Game {
         fast: 'Rychlý míček!',
         slow: 'Pomalý míček!',
         laser: 'Laser!',
+        pierce: 'Průrazný míček!',
       } as const
     )[t];
   }
@@ -756,10 +772,29 @@ export class Game {
     }
 
     // balls
+    const piercing = this.effects.has('pierce');
     for (const b of this.balls) {
-      c.fillStyle = '#ffffff';
-      c.shadowColor = '#ffffff';
-      c.shadowBlur = 10;
+      if (piercing) {
+        // piercing ball: silver-white core with cyan glow + motion trail
+        const spd = Math.hypot(b.vx, b.vy) || 1;
+        const tx = (b.vx / spd) * b.r;
+        const ty = (b.vy / spd) * b.r;
+        for (let i = 3; i >= 1; i--) {
+          c.globalAlpha = 0.12 * (4 - i);
+          c.fillStyle = '#7df9ff';
+          c.beginPath();
+          c.arc(b.x - tx * i * 1.6, b.y - ty * i * 1.6, b.r * (1 - i * 0.18), 0, Math.PI * 2);
+          c.fill();
+        }
+        c.globalAlpha = 1;
+        c.fillStyle = '#eaf6ff';
+        c.shadowColor = '#7df9ff';
+        c.shadowBlur = 16;
+      } else {
+        c.fillStyle = '#ffffff';
+        c.shadowColor = '#ffffff';
+        c.shadowBlur = 10;
+      }
       c.beginPath();
       c.arc(b.x, b.y, b.r, 0, Math.PI * 2);
       c.fill();
