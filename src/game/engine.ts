@@ -34,6 +34,7 @@ interface Ball {
   r: number;
   stuck: boolean; // attached to paddle (sticky powerup or level start)
   stuckOffset: number;
+  stuckReason: 'start' | 'sticky'; // why the ball is attached to the paddle
 }
 
 interface Brick {
@@ -214,6 +215,7 @@ export class Game {
       r: this.baseRadius,
       stuck: true,
       stuckOffset: this.paddle.w / 2,
+      stuckReason: 'start',
     });
   }
 
@@ -318,10 +320,11 @@ export class Game {
     }
   }
 
-  private launchStuck() {
+  private launchStuck(onlyReason?: Ball['stuckReason']) {
     const speed = this.baseSpeed * this.speedMult;
     for (const b of this.balls) {
       if (!b.stuck) continue;
+      if (onlyReason && b.stuckReason !== onlyReason) continue;
       b.stuck = false;
       const ang = (-60 + Math.random() * 120) * (Math.PI / 180);
       b.vx = Math.sin(ang) * speed;
@@ -397,6 +400,7 @@ export class Game {
       ) {
         if (this.effects.has('sticky')) {
           b.stuck = true;
+          b.stuckReason = 'sticky';
           b.stuckOffset = b.x - this.paddle.x;
           b.vx = 0;
           b.vy = 0;
@@ -592,6 +596,13 @@ export class Game {
     this.effects.delete(type);
     if (type === 'expand' || type === 'shrink') this.paddle.w = this.basePaddleW;
     if (type === 'fast' || type === 'slow') this.speedMult = 1;
+    if (type === 'sticky') {
+      // Sticky expired while balls are still glued to the paddle — release them
+      // immediately, otherwise they'd be stuck forever (tap() only launches when
+      // the effect is active). Only balls glued BY the sticky powerup launch;
+      // a level-start ball waiting on the paddle (stuckReason 'start') must stay.
+      this.launchStuck('sticky');
+    }
   }
 
   private powerupName(t: PowerupType): string {
