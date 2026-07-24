@@ -1,16 +1,46 @@
-# HANDOFF — Gazdovský arkanoid (MVP v0.1)
+# HANDOFF — Gazdovský arkanoid (MVP v0.2)
 
 Datum: 2026-07-24
+
+## 🐛 Opravy v0.2 (2026-07-24)
+
+### 1. Životy (srdíčka) mimo obrazovku na mobilu
+`renderHUD()` kreslil životy jako emoji řetězec `❤️` s `textAlign='right'` — `measureText`/zarovnání emoji (multi-byte + variant selector U+FE0F) je napříč platformami nespolehlivé, na mobilu srdíčka utekla mimo canvas doprava a viditelné bylo jen jedno.
+**Oprava:** nová metoda `drawHeart(x, y, size, filled)` kreslí srdíčko jako canvas bezier path (růžová `#ff5d8f` s glow + gloss highlight). Srdíčka mají pevnou velikost 16 px a rozteč 5 px, celek je zarovnán doprava od `WORLD_W - 14`. Ztracené životy se ukazují jako ztlumené obrysy (slotů je `max(START_LIVES, lives)`), takže funguje i 5 životů na úzkém displeji. Emoji 💀 fallback odstraněn (životy 0 = Game Over obrazovka).
+
+### 2. Levely 29–50 byly téměř identické
+Původně: `rows` strop 11 už na L29, `maxHp` natvrdo 3 od L16, lineární rychlost → druhá polovina hry splývala.
+**Redesign škálování (deterministické RNG `mulberry32` zachováno, API `generateLevel(n)` beze změny):**
+- **rows:** `4 + ceil((n-1)/49 * 10)` → plynule 4 → 14 napříč všemi 50 levely
+- **maxHp:** 5 úrovní — L1–5: 1, L6–14: 2, L15–24: 3, L25–34: 4, L35–50: 5 (nové barvy: hp4 oranžová `#ff9f1c`, hp5 fialová `#c77dff`; skóre 320/480; hit-dot pips centrovány pro až 5 hp)
+- **ballSpeed:** `330 + (n-1)*7 + (n>30 ? (n-30)*9 : 0)`, strop 780 px/s — zrychlení v poslední třetině
+- **ballRadius:** 7 → 5, krok každých 10 levelů (dřív 12)
+- **density:** `min(0.6 + n*0.0075, 0.97)` — roste až do konce
+- **3. pattern:** od L25 s pravděpodobností rostoucí k 0,6 (dřív max 2)
+- **Boss levely** (10/20/30/40/50): +1 řada, +1 maxHp, density +0,1 (max 0,98), vždy min. 2 vrstvené patterny — vizuální milník
+- **Pádlo:** base šířka se po L30 zmenšuje až o 25 % (`basePaddleW = PADDLE_W * (1 - min(0.25, (level-30)*0.0125))`); expand/shrink powerupy násobí tuto base hodnotu, takže nekolidují
+
+**Ověřená čísla (test skript přes `generateLevel`):**
+
+| Level | rows | bricks | maxHp | speed | radius |
+|-------|------|--------|-------|-------|--------|
+| 1     | 4    | 11     | 1     | 330   | 7      |
+| 10 🔥 | 7    | 53     | 3     | 393   | 7      |
+| 25    | 9    | 73     | 4     | 498   | 5      |
+| 40 🔥 | 13   | 128    | 5     | 693   | 5      |
+| 50 🔥 | 14   | 133    | 5     | 780   | 5      |
+
+(🔥 = boss level; 14 řad × 26 px = vrchol cihlového pole na y=460, bezpečně nad pádlem y=644)
 
 ## ✅ Hotové
 
 - **Kompletní hratelná hra** (Vite + TS + Canvas, ~8 kB gzip JS):
   - úvodní menu s výběrem 7 hráčů (Táta, Máma, Laura, Honza, Maty, Tobi, Miku)
-  - 50 procedurálně generovaných levelů (seedovaný RNG → všichni hrají stejné levely; roste počet řad, pevnost cihel 1–3 zásahy s barvami zelená/žlutá/růžová, rychlost míčku 330→640 px/s, menší míček na vyšších levelech; 10 různých vzorů layoutu, na vyšších levelech se vrství 2 vzory)
+  - 50 procedurálně generovaných levelů (seedovaný RNG → všichni hrají stejné levely; roste počet řad 4→14, pevnost cihel 1–5 zásahů s barvami zelená/žlutá/růžová/oranžová/fialová, rychlost míčku 330→780 px/s, menší míček i pádlo na vyšších levelech; 10 různých vzorů layoutu, na vyšších levelech se vrství 2–3 vzory, každý 10. level je bossovský milník — viz sekce Opravy v0.2)
   - fyzika odrazů: úhel podle místa dopadu na pádlo (±62°), odrazy od stěn/cihel s korekcí osy
   - všech 8 bonusů: expand, shrink, multiball (max 6 míčků), +1 život, sticky (ťuk = vypuštění), fast/slow ball, laser (ťuk = střelba, cooldown 0,28 s)
   - 3 životy, Game Over obrazovka se skóre, restart, návrat do menu
-  - skóre: 50/120/200 b za cihlu dle pevnosti + level×100 bonus; HUD se skóre/levelem/životy
+  - skóre: 50/120/200/320/480 b za cihlu dle pevnosti + level×100 bonus; HUD se skóre/levelem/životy (životy = vektorová srdíčka, ne emoji)
   - částicové efekty při rozbití cihly, glow efekty, animované pozadí, synth zvuky (WebAudio, žádné assety)
 - **Touch ovládání:** levá/pravá polovina = hold-to-move (multi-touch podporován), ťuk = vypuštění/laser; jemné vizuální naznačení zón dole; mouse/klávesnice fallback pro desktop test
 - **PWA:** manifest.webmanifest, service worker (cache-first, verzovaný cache `gazdovsky-arkanoid-v1`), vygenerované ikony (180/192/512/maskable), apple-touch-icon, viewport-fit=cover, `touch-action: none`
