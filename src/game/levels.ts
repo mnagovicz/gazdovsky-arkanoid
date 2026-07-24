@@ -3,7 +3,7 @@ import { BRICK_COLS } from '../config';
 export interface BrickDef {
   col: number;
   row: number;
-  hp: number; // 1..3
+  hp: number; // 1..5
 }
 
 /** Deterministic seeded RNG so every player sees the same level layouts. */
@@ -116,11 +116,14 @@ const patterns: Pattern[] = [
 ];
 
 /**
- * Generate level `n` (1-based, 1..50). Difficulty scales:
- *  - more rows of bricks
- *  - tougher bricks (more multi-hit)
- *  - faster, slightly smaller ball (handled by engine via ballSpeed/ballRadius)
- *  - denser, more varied patterns
+ * Generate level `n` (1-based, 1..50). Difficulty scales across ALL 50 levels:
+ *  - rows ramp smoothly 4 → 14 (was capped at 11 already on level 29)
+ *  - brick toughness in 5 tiers 1..5 hp (was hard-capped at 3 from level 16)
+ *  - ball speed grows linearly, then accelerates after level 30 (330 → 780)
+ *  - density ramps up to 0.97 (keeps growing until the very end)
+ *  - every 10th level (10/20/30/40/50) is a "boss" milestone: +1 row,
+ *    +1 maxHp, near-full density, always 2 layered patterns
+ *  - late levels layer up to 3 patterns for more visual variety
  */
 export function generateLevel(n: number): {
   bricks: BrickDef[];
@@ -128,21 +131,35 @@ export function generateLevel(n: number): {
   ballRadius: number;
 } {
   const rng = mulberry32(n * 7919 + 13);
+  const boss = n % 10 === 0;
 
-  const rows = Math.min(4 + Math.floor((n - 1) / 4), 11);
-  const maxHp = n < 6 ? 1 : n < 16 ? 2 : 3;
-  const density = Math.min(0.62 + n * 0.008, 0.95);
+  // rows: smooth ramp 4 → 14 over the full 50-level range
+  let rows = 4 + Math.ceil(((n - 1) / 49) * 10);
+  if (boss) rows = Math.min(rows + 1, 14);
+
+  // brick toughness tiers (engine has colors/score for hp 1..5)
+  let maxHp = n < 6 ? 1 : n < 15 ? 2 : n < 25 ? 3 : n < 35 ? 4 : 5;
+  if (boss) maxHp = Math.min(maxHp + 1, 5);
+
+  // density keeps growing until the final levels
+  let density = Math.min(0.6 + n * 0.0075, 0.97);
+  if (boss) density = Math.min(density + 0.1, 0.98);
 
   const cells: (number | null)[][] = Array.from({ length: rows }, () =>
     Array(BRICK_COLS).fill(null),
   );
 
-  // 1-2 patterns layered for variety
+  // 1-3 patterns layered for variety (bosses always get at least 2)
   const p1 = patterns[Math.floor(rng() * patterns.length)];
   p1(cells, rows, rng, maxHp);
-  if (n > 8 && rng() < Math.min(0.25 + n * 0.012, 0.7)) {
+  const want2 = boss || (n > 8 && rng() < Math.min(0.25 + n * 0.012, 0.75));
+  if (want2) {
     const p2 = patterns[Math.floor(rng() * patterns.length)];
     p2(cells, rows, rng, maxHp);
+  }
+  if (n > 25 && rng() < Math.min(0.1 + (n - 25) * 0.02, 0.6)) {
+    const p3 = patterns[Math.floor(rng() * patterns.length)];
+    p3(cells, rows, rng, maxHp);
   }
 
   // density filter (keeps early levels sparse)
@@ -151,8 +168,10 @@ export function generateLevel(n: number): {
     for (let c = 0; c < BRICK_COLS; c++) {
       const hp = cells[r][c];
       if (hp !== null && rng() < density) {
-        // tougher bricks appear deeper into the game, top rows hardest
-        const tough = Math.min(maxHp, Math.max(1, hp + (n > 20 && r < rows / 3 && rng() < 0.4 ? 1 : 0)));
+        // tougher bricks appear deeper into the game, top rows hardest;
+        // the bump chance grows with level
+        const bump = n > 15 && r < rows / 3 && rng() < Math.min(0.15 + n * 0.008, 0.55) ? 1 : 0;
+        const tough = Math.min(maxHp, Math.max(1, hp + bump));
         bricks.push({ col: c, row: r, hp: tough });
       }
     }
@@ -163,8 +182,9 @@ export function generateLevel(n: number): {
       bricks.push({ col: c, row: 0, hp: 1 });
   }
 
-  const ballSpeed = Math.min(330 + (n - 1) * 7, 640);
-  const ballRadius = Math.max(7 - Math.floor((n - 1) / 12), 5);
+  // speed: linear early, accelerating after level 30
+  const ballSpeed = Math.min(330 + (n - 1) * 7 + (n > 30 ? (n - 30) * 9 : 0), 780);
+  const ballRadius = Math.max(7 - Math.floor((n - 1) / 10), 5);
 
   return { bricks, ballSpeed, ballRadius };
 }

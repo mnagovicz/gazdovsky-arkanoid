@@ -76,8 +76,10 @@ const HP_COLORS: Record<number, string[]> = {
   1: ['#06d6a0', '#04b589'], // green — one hit
   2: ['#ffd23f', '#e6b800'], // yellow — two hits
   3: ['#ff5d8f', '#d63a6e'], // pink — three hits
+  4: ['#ff9f1c', '#d67d00'], // orange — four hits
+  5: ['#c77dff', '#9a4edd'], // purple — five hits
 };
-const HP_SCORE: Record<number, number> = { 1: 50, 2: 120, 3: 200 };
+const HP_SCORE: Record<number, number> = { 1: 50, 2: 120, 3: 200, 4: 320, 5: 480 };
 
 const POWERUP_META: Record<PowerupType, { color: string; label: string }> = {
   expand: { color: '#06d6a0', label: '↔' },
@@ -122,6 +124,7 @@ export class Game {
 
   private baseSpeed = 330;
   private baseRadius = 7;
+  private basePaddleW = PADDLE_W;
   private speedMult = 1;
   private effects = new Map<PowerupType, number>(); // type -> remaining seconds
 
@@ -177,7 +180,12 @@ export class Game {
     this.effects.clear();
     this.powerups = [];
     this.lasers = [];
-    this.paddle.w = PADDLE_W;
+    // base paddle shrinks on high levels (after 30) as an extra difficulty factor;
+    // expand/shrink powerups scale relative to this base
+    this.basePaddleW = Math.round(
+      PADDLE_W * (1 - Math.min(0.25, Math.max(0, (this.level - 30) * 0.0125))),
+    );
+    this.paddle.w = this.basePaddleW;
     this.paddle.x = WORLD_W / 2 - this.paddle.w / 2;
 
     const brickW = (WORLD_W - 24 - (BRICK_COLS - 1) * BRICK_GAP) / BRICK_COLS;
@@ -434,7 +442,7 @@ export class Game {
       sfx.lose();
       this.effects.clear();
       this.speedMult = 1;
-      this.paddle.w = PADDLE_W;
+      this.paddle.w = this.basePaddleW;
       this.powerups = [];
       this.lasers = [];
       if (this.lives <= 0) {
@@ -538,12 +546,12 @@ export class Game {
       case 'expand':
         this.effects.set('expand', EFFECT_DUR.expand!);
         this.effects.delete('shrink');
-        this.paddle.w = PADDLE_W * 1.5;
+        this.paddle.w = this.basePaddleW * 1.5;
         break;
       case 'shrink':
         this.effects.set('shrink', EFFECT_DUR.shrink!);
         this.effects.delete('expand');
-        this.paddle.w = PADDLE_W * 0.6;
+        this.paddle.w = this.basePaddleW * 0.6;
         break;
       case 'multiball': {
         const src = this.balls.filter((b) => !b.stuck);
@@ -582,7 +590,7 @@ export class Game {
 
   private expireEffect(type: PowerupType) {
     this.effects.delete(type);
-    if (type === 'expand' || type === 'shrink') this.paddle.w = PADDLE_W;
+    if (type === 'expand' || type === 'shrink') this.paddle.w = this.basePaddleW;
     if (type === 'fast' || type === 'slow') this.speedMult = 1;
   }
 
@@ -681,12 +689,14 @@ export class Game {
       c.fillStyle = 'rgba(255,255,255,0.35)';
       this.roundRect(br.x + 2, br.y + 2, br.w - 4, 5, 3);
       c.fill();
-      // hit dots for tough bricks
+      // hit dots for tough bricks (centered, scales up to 5 hp)
       if (br.maxHp > 1) {
         c.fillStyle = 'rgba(0,0,0,0.3)';
+        const gap = 6.5;
+        const startX = br.x + br.w / 2 - ((br.hp - 1) * gap) / 2;
         for (let i = 0; i < br.hp; i++) {
           c.beginPath();
-          c.arc(br.x + 8 + i * 8, br.y + br.h / 2 + 1, 2, 0, Math.PI * 2);
+          c.arc(startX + i * gap, br.y + br.h / 2 + 1, 2, 0, Math.PI * 2);
           c.fill();
         }
       }
